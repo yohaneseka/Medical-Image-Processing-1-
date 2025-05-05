@@ -12,35 +12,31 @@ def main():
     st.title("Midterm Final Project of Medical Image Processing🩻")
     st.markdown("### Yohanes Eka Adi Prasetyo - 5023221016")
 
-    # Path input for DICOM directory
-    path_input = st.text_input(
-        "Path to DICOM directory", 
-        value=r"C:\Users\Yohanes\OneDrive\Documents\COLLEGE\6th Semester\Medical Image Processing\B.Nada 2\SE000001"
+    # Upload DICOM files
+    uploaded_files = st.file_uploader(
+        "Upload DICOM files (.dcm)", 
+        type=["dcm"], 
+        accept_multiple_files=True
     )
-    
-    path_to_head_mri = Path(path_input)
-    
-    if not path_to_head_mri.exists():
-        st.error(f"Path tidak ditemukan: {path_to_head_mri}")
+
+    if not uploaded_files:
+        st.info("Silakan upload satu atau lebih file DICOM (.dcm)")
         return
-    
+
     # Load DICOM files
     with st.spinner("Loading DICOM files..."):
-        all_files = list(path_to_head_mri.glob("*"))
-        
-        if not all_files:
-            st.error("Tidak ada file yang ditemukan di direktori tersebut.")
-            return
-        
-        # Read DICOM files
         mri_data = []
-        for path in all_files:
+        for uploaded_file in uploaded_files:
             try:
-                data = pydicom.dcmread(path)
-                mri_data.append(data)
+                dcm = pydicom.dcmread(BytesIO(uploaded_file.read()))
+                mri_data.append(dcm)
             except Exception as e:
-                st.warning(f"Error membaca file {path.name}: {str(e)}")
-        
+                st.warning(f"Error membaca file {uploaded_file.name}: {str(e)}")
+
+        if not mri_data:
+            st.error("Tidak ada file DICOM yang berhasil dimuat.")
+            return
+
         # Sort by SliceLocation
         try:
             mri_data_ordered = sorted(mri_data, key=lambda slice: slice.SliceLocation)
@@ -48,19 +44,19 @@ def main():
         except AttributeError:
             st.warning("File DICOM tidak memiliki atribut SliceLocation. Menggunakan urutan asli.")
             mri_data_ordered = mri_data
-    
+
     # Create full volume
     full_volume = np.array([slice_data.pixel_array for slice_data in mri_data_ordered])
     st.write(f"Ukuran volume: {full_volume.shape}")
-    
+
     # Slider to select slice
-    slice_number = st.slider("Pilih slice", 0, len(full_volume) - 1, 15)
+    slice_number = st.slider("Pilih slice", 0, len(full_volume) - 1, 0)
     selected_image = full_volume[slice_number].copy()
-    
+
     # Normalize image to 0-255 range
     if selected_image.max() > selected_image.min():
         normalized_image = ((selected_image - selected_image.min()) / 
-                           (selected_image.max() - selected_image.min()) * 255).astype(np.uint8)
+                            (selected_image.max() - selected_image.min()) * 255).astype(np.uint8)
     else:
         normalized_image = selected_image.astype(np.uint8)
     
