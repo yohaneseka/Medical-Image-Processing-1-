@@ -7,53 +7,43 @@ from matplotlib.figure import Figure
 from skimage import exposure
 from scipy import ndimage
 import pandas as pd
+from io import BytesIO
 
 def main():
-    st.title("Midterm Final Project of Medical Image Processing🩻")
+    st.title("MRI Volume Viewer🧠")
     st.markdown("### Yohanes Eka Adi Prasetyo - 5023221016")
 
-    # Upload DICOM files
-    uploaded_files = st.file_uploader(
-        "Upload DICOM files (.dcm)", 
-        type=["dcm"], 
-        accept_multiple_files=True
+    # Upload .npy file
+    uploaded_file = st.file_uploader(
+        "Upload file .npy (numpy 3D array)", 
+        type=["npy"]
     )
 
-    if not uploaded_files:
-        st.info("Silakan upload satu atau lebih file DICOM (.dcm)")
+    if uploaded_file is None:
+        st.info("Silakan upload file .npy yang berisi stack MRI (shape: slices x height x width)")
         return
 
-    # Load DICOM files
-    with st.spinner("Loading DICOM files..."):
-        mri_data = []
-        for uploaded_file in uploaded_files:
-            try:
-                dcm = pydicom.dcmread(BytesIO(uploaded_file.read()))
-                mri_data.append(dcm)
-            except Exception as e:
-                st.warning(f"Error membaca file {uploaded_file.name}: {str(e)}")
+    # Load numpy array
+    try:
+        # Read file into numpy array
+        bytes_data = uploaded_file.read()
+        mri_volume = np.load(BytesIO(bytes_data))
+    except Exception as e:
+        st.error(f"Gagal membaca file: {str(e)}")
+        return
 
-        if not mri_data:
-            st.error("Tidak ada file DICOM yang berhasil dimuat.")
-            return
+    # Check shape
+    if mri_volume.ndim != 3:
+        st.error(f"File harus berisi array 3D. Ditemukan shape: {mri_volume.shape}")
+        return
 
-        # Sort by SliceLocation
-        try:
-            mri_data_ordered = sorted(mri_data, key=lambda slice: slice.SliceLocation)
-            st.success(f"Berhasil memuat {len(mri_data_ordered)} DICOM slices.")
-        except AttributeError:
-            st.warning("File DICOM tidak memiliki atribut SliceLocation. Menggunakan urutan asli.")
-            mri_data_ordered = mri_data
-
-    # Create full volume
-    full_volume = np.array([slice_data.pixel_array for slice_data in mri_data_ordered])
-    st.write(f"Ukuran volume: {full_volume.shape}")
+    st.success(f"Berhasil memuat volume dengan shape {mri_volume.shape}")
 
     # Slider to select slice
-    slice_number = st.slider("Pilih slice", 0, len(full_volume) - 1, 0)
-    selected_image = full_volume[slice_number].copy()
+    slice_number = st.slider("Pilih slice", 0, mri_volume.shape[0] - 1, 0)
+    selected_image = mri_volume[slice_number].copy()
 
-    # Normalize image to 0-255 range
+    # Normalize image to 0-255
     if selected_image.max() > selected_image.min():
         normalized_image = ((selected_image - selected_image.min()) / 
                             (selected_image.max() - selected_image.min()) * 255).astype(np.uint8)
