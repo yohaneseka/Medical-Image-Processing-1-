@@ -10,46 +10,70 @@ import pandas as pd
 from io import BytesIO
 
 def main():
-    st.title("MRI Volume Viewer🧠")
+    st.title("MRI DICOM Viewer 🧠")
     st.markdown("### Yohanes Eka Adi Prasetyo - 5023221016")
 
-    # Upload .npy file
-    uploaded_file = st.file_uploader(
-        "Upload file .npy (numpy 3D array)", 
-        type=["npy"]
+    # Upload multiple DICOM files
+    uploaded_files = st.file_uploader(
+        "Upload beberapa file DICOM (.dcm)",
+        type=["dcm"],
+        accept_multiple_files=True
     )
 
-    if uploaded_file is None:
-        st.info("Silakan upload file .npy yang berisi stack MRI (shape: slices x height x width)")
+    if not uploaded_files:
+        st.info("Silakan upload satu folder berisi file DICOM (.dcm)")
         return
 
-    # Load numpy array
+    # Load DICOM files
+    mri_data = []
+    file_names = []
+    with st.spinner("Loading DICOM files..."):
+        for uploaded_file in uploaded_files:
+            try:
+                dcm = pydicom.dcmread(BytesIO(uploaded_file.read()))
+                mri_data.append(dcm)
+                file_names.append(uploaded_file.name)
+            except Exception as e:
+                st.warning(f"Error membaca file {uploaded_file.name}: {str(e)}")
+
+    if not mri_data:
+        st.error("Tidak ada file DICOM yang berhasil dimuat.")
+        return
+
+    # Sort DICOM files: first try by SliceLocation, fallback to file name
     try:
-        # Read file into numpy array
-        bytes_data = uploaded_file.read()
-        mri_volume = np.load(BytesIO(bytes_data))
-    except Exception as e:
-        st.error(f"Gagal membaca file: {str(e)}")
-        return
+        mri_data_ordered = sorted(mri_data, key=lambda x: x.SliceLocation)
+        st.success("Berhasil diurutkan berdasarkan SliceLocation.")
+    except AttributeError:
+        st.warning("Tidak ada atribut SliceLocation. Diurutkan berdasarkan nama file.")
+        # sort by corresponding uploaded file name
+        mri_data_ordered = [d for _, d in sorted(zip(file_names, mri_data), key=lambda x: x[0])]
 
-    # Check shape
-    if mri_volume.ndim != 3:
-        st.error(f"File harus berisi array 3D. Ditemukan shape: {mri_volume.shape}")
-        return
+    # Extract metadata (ambil dari slice pertama)
+    metadata = mri_data_ordered[0]
+    patient_name = getattr(metadata, 'PatientName', 'N/A')
+    modality = getattr(metadata, 'Modality', 'N/A')
+    study_date = getattr(metadata, 'StudyDate', 'N/A')
 
-    st.success(f"Berhasil memuat volume dengan shape {mri_volume.shape}")
+    st.markdown(f"**Patient Name:** {patient_name}")
+    st.markdown(f"**Modality:** {modality}")
+    st.markdown(f"**Study Date:** {study_date}")
+    st.markdown(f"**Total Slices:** {len(mri_data_ordered)}")
 
-    # Slider to select slice
-    slice_number = st.slider("Pilih slice", 0, mri_volume.shape[0] - 1, 0)
-    selected_image = mri_volume[slice_number].copy()
+    # Create full volume
+    full_volume = np.array([slice_data.pixel_array for slice_data in mri_data_ordered])
+    st.write(f"Ukuran volume: {full_volume.shape}")
+
+    # Slider untuk memilih slice
+    slice_number = st.slider("Pilih slice", 0, len(full_volume) - 1, 0)
+    selected_image = full_volume[slice_number].copy()
 
     # Normalize image to 0-255
     if selected_image.max() > selected_image.min():
-        normalized_image = ((selected_image - selected_image.min()) / 
+        normalized_image = ((selected_image - selected_image.min()) /
                             (selected_image.max() - selected_image.min()) * 255).astype(np.uint8)
     else:
-        normalized_image = selected_image.astype(np.uint8)
-    
+        normalized_image = selected_image.astype(np.uint8)    
     # Display simplified DICOM metadata for selected slice
     with st.expander("DICOM Metadata"):
         selected_slice = mri_data_ordered[slice_number]
