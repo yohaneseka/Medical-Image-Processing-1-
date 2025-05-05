@@ -1,0 +1,8 @@
+streamlit==1.41.1
+pydicom==3.0.1
+pathlib==1.0.1
+numpy==1.26.4
+matplotlib==3.9.0
+scikit-image==0.24.0
+scipy==1.15.2
+pandas== 2.2.3
